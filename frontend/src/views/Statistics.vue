@@ -69,11 +69,14 @@ import * as echarts from 'echarts'
 import { getTrend, getCategoryStats } from '@/api/statistics'
 import { formatAmount, getMonthRange, getWeekRange, getYearRange } from '@/utils/format'
 import { getCategoryIcon } from '@/utils/constants'
-import { mapGetters } from 'vuex'
 import dayjs from 'dayjs'
+import { createBookDataMixin } from '@/mixins/useCurrentBookData'
 
 export default {
   name: 'Statistics',
+  mixins: [createBookDataMixin(function() {
+    return this.fetchBookData()
+  }, { immediate: false })],
   data() {
     return {
       period: 'month',
@@ -92,7 +95,6 @@ export default {
     }
   },
   computed: {
-    ...mapGetters(['currentBook']),
     dateRange() {
       switch (this.period) {
         case 'week':
@@ -117,17 +119,14 @@ export default {
   },
   mounted() {
     this.initCharts()
-    this.fetchData()
+    this.refreshBookData()
   },
   beforeDestroy() {
     this.destroyCharts()
   },
   watch: {
     period() {
-      this.fetchData()
-    },
-    currentBook() {
-      this.fetchData()
+      this.refreshBookData()
     }
   },
   methods: {
@@ -151,30 +150,24 @@ export default {
       this.expenseChartInstance?.resize()
       this.incomeChartInstance?.resize()
     },
-    async fetchData() {
-      if (!this.currentBook) return
-
-      try {
-        const params = {
-          bookId: this.currentBook.id,
-          period: this.period,
-          ...this.dateRange
-        }
-
-        const [trendRes, expenseRes, incomeRes] = await Promise.all([
-          getTrend(params),
-          getCategoryStats({ ...params, type: 2 }),
-          getCategoryStats({ ...params, type: 1 })
-        ])
-
-        this.trendData = trendRes.data || { labels: [], income: [], expense: [] }
-        this.expenseCategories = expenseRes.data || []
-        this.incomeCategories = incomeRes.data || []
-
-        this.updateCharts()
-      } catch (err) {
-        // 错误已处理
+    async fetchBookData() {
+      const params = {
+        bookId: this.currentBook.id,
+        period: this.period,
+        ...this.dateRange
       }
+
+      const [trendRes, expenseRes, incomeRes] = await Promise.all([
+        getTrend(params),
+        getCategoryStats({ ...params, type: 2 }),
+        getCategoryStats({ ...params, type: 1 })
+      ])
+
+      this.trendData = trendRes.data || { labels: [], income: [], expense: [] }
+      this.expenseCategories = expenseRes.data || []
+      this.incomeCategories = incomeRes.data || []
+
+      this.updateCharts()
     },
     updateCharts() {
       // 趋势图

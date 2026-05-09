@@ -165,11 +165,14 @@ import { getCategories } from '@/api/category'
 import { getCategoryStats } from '@/api/statistics'
 import { formatAmount, getCurrentYearMonth, getMonthRange } from '@/utils/format'
 import { getCategoryIcon } from '@/utils/constants'
-import { mapGetters } from 'vuex'
 import dayjs from 'dayjs'
+import { createBookDataMixin } from '@/mixins/useCurrentBookData'
 
 export default {
   name: 'Budget',
+  mixins: [createBookDataMixin(function() {
+    return this.fetchBookData()
+  })],
   data() {
     return {
       budgets: [],
@@ -189,7 +192,6 @@ export default {
     }
   },
   computed: {
-    ...mapGetters(['currentBook']),
     currentMonth() {
       return dayjs().format('M')
     },
@@ -224,14 +226,6 @@ export default {
       return '#67C23A'
     }
   },
-  created() {
-    this.fetchData()
-  },
-  watch: {
-    currentBook() {
-      this.fetchData()
-    }
-  },
   methods: {
     formatAmount,
     getCategoryIcon,
@@ -249,37 +243,30 @@ export default {
       if (progress >= 80) return '#ff922b'
       return '#67C23A'
     },
-    async fetchData() {
-      if (!this.currentBook) return
+    async fetchBookData() {
+      const dateRange = getMonthRange(this.yearMonth)
 
-      try {
-        const dateRange = getMonthRange(this.yearMonth)
-
-        const [budgetRes, categoryRes, statsRes] = await Promise.all([
-          getBudgets({ bookId: this.currentBook.id, yearMonth: this.yearMonth }),
-          getCategories(),
-          getCategoryStats({
-            bookId: this.currentBook.id,
-            type: 2,
-            ...dateRange
-          })
-        ])
-
-        this.budgets = budgetRes.data || []
-        this.categories = categoryRes.data || []
-
-        // 计算各分类支出
-        const stats = statsRes.data || []
-        this.categorySpending = {}
-        this.totalSpent = 0
-
-        stats.forEach(item => {
-          this.categorySpending[item.categoryId] = item.amount
-          this.totalSpent += item.amount
+      const [budgetRes, categoryRes, statsRes] = await Promise.all([
+        getBudgets({ bookId: this.currentBook.id, yearMonth: this.yearMonth }),
+        getCategories(),
+        getCategoryStats({
+          bookId: this.currentBook.id,
+          type: 2,
+          ...dateRange
         })
-      } catch (err) {
-        // 错误已处理
-      }
+      ])
+
+      this.budgets = budgetRes.data || []
+      this.categories = categoryRes.data || []
+
+      const stats = statsRes.data || []
+      this.categorySpending = {}
+      this.totalSpent = 0
+
+      stats.forEach(item => {
+        this.categorySpending[item.categoryId] = item.amount
+        this.totalSpent += item.amount
+      })
     },
     async saveTotalBudget() {
       try {
@@ -292,7 +279,7 @@ export default {
 
         this.$message.success('保存成功')
         this.showTotalBudgetDialog = false
-        this.fetchData()
+        this.refreshBookData()
       } catch (err) {
         // 错误已处理
       }
@@ -322,7 +309,7 @@ export default {
         this.$message.success('保存成功')
         this.showCategoryBudgetDialog = false
         this.categoryBudgetForm = { id: null, categoryId: null, amount: 0 }
-        this.fetchData()
+        this.refreshBookData()
       } catch (err) {
         // 错误已处理
       }
@@ -337,7 +324,7 @@ export default {
 
         await deleteBudget(budget.id)
         this.$message.success('删除成功')
-        this.fetchData()
+        this.refreshBookData()
       } catch (err) {
         if (err !== 'cancel') {
           // 错误已处理
