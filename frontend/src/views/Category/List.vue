@@ -6,7 +6,7 @@
         <el-switch
           v-model="includeHidden"
           active-text="显示隐藏分类"
-          @change="fetchCategories"
+          @change="refreshBookData"
         ></el-switch>
         <el-button type="primary" size="small" @click="showAddDialog">
           <i class="fas fa-plus"></i> 添加分类
@@ -104,9 +104,13 @@
 
 <script>
 import { getCategories, createCategory, updateCategory, deleteCategory, getCategoryTransactionsCount } from '@/api/category'
+import { createBookDataMixin } from '@/mixins/useCurrentBookData'
 
 export default {
   name: 'CategoryList',
+  mixins: [createBookDataMixin(function() {
+    return this.fetchBookData()
+  })],
   data() {
     return {
       categories: [],
@@ -138,17 +142,10 @@ export default {
       return this.categories.filter(c => c.type === 1)
     }
   },
-  created() {
-    this.fetchCategories()
-  },
   methods: {
-    async fetchCategories() {
-      try {
-        const res = await getCategories({ includeHidden: this.includeHidden })
-        this.categories = res.data || []
-      } catch (err) {
-        // 错误已处理
-      }
+    async fetchBookData() {
+      const res = await getCategories({ includeHidden: this.includeHidden })
+      this.categories = res.data || []
     },
     showAddDialog() {
       this.form = { id: null, name: '', type: parseInt(this.activeType), icon: 'fa-tag' }
@@ -171,7 +168,7 @@ export default {
             this.$message.success('创建成功')
           }
           this.showDialog = false
-          this.fetchCategories()
+          this.refreshBookData()
         } catch (err) {
           // 错误已处理
         }
@@ -199,7 +196,7 @@ export default {
 
         await deleteCategory(cat.id)
         this.$message.success('删除成功')
-        this.fetchCategories()
+        this.refreshBookData()
       } catch (err) {
         if (err !== 'cancel') {
           // 错误已处理
@@ -210,7 +207,7 @@ export default {
       try {
         await updateCategory(cat.id, { ...cat, isHidden: !cat.isHidden })
         this.$message.success(cat.isHidden ? '已显示' : '已隐藏')
-        this.fetchCategories()
+        this.refreshBookData()
       } catch (err) {
         // 错误已处理
       }

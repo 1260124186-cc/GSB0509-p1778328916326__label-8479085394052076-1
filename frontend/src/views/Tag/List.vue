@@ -50,9 +50,13 @@
 <script>
 import { getTags, createTag, updateTag, deleteTag } from '@/api/tag'
 import { tagColors } from '@/utils/constants'
+import { createBookDataMixin } from '@/mixins/useCurrentBookData'
 
 export default {
   name: 'TagList',
+  mixins: [createBookDataMixin(function() {
+    return this.fetchBookData()
+  })],
   data() {
     return {
       tags: [],
@@ -71,17 +75,10 @@ export default {
       }
     }
   },
-  created() {
-    this.fetchTags()
-  },
   methods: {
-    async fetchTags() {
-      try {
-        const res = await getTags()
-        this.tags = res.data || []
-      } catch (err) {
-        // 错误已处理
-      }
+    async fetchBookData() {
+      const res = await getTags()
+      this.tags = res.data || []
     },
     showAddDialog() {
       this.form = { id: null, name: '', color: this.tagColors[0] }
@@ -104,7 +101,7 @@ export default {
             this.$message.success('创建成功')
           }
           this.showDialog = false
-          this.fetchTags()
+          this.refreshBookData()
         } catch (err) {
           // 错误已处理
         }
@@ -120,7 +117,7 @@ export default {
 
         await deleteTag(tag.id)
         this.$message.success('删除成功')
-        this.fetchTags()
+        this.refreshBookData()
       } catch (err) {
         if (err !== 'cancel') {
           // 错误已处理

@@ -93,10 +93,13 @@ import { getTransactions } from '@/api/transaction'
 import { getBudgets } from '@/api/budget'
 import { formatAmount, getDateLabel } from '@/utils/format'
 import { getCategoryIcon } from '@/utils/constants'
-import { mapGetters } from 'vuex'
+import { createBookDataMixin } from '@/mixins/useCurrentBookData'
 
 export default {
   name: 'Dashboard',
+  mixins: [createBookDataMixin(function() {
+    return this.fetchBookData()
+  })],
   data() {
     return {
       overview: {
@@ -110,12 +113,10 @@ export default {
         yearExpense: 0
       },
       recentTransactions: [],
-      totalBudget: 0,
-      loading: false
+      totalBudget: 0
     }
   },
   computed: {
-    ...mapGetters(['currentBook']),
     remainingBudget() {
       return Math.max(0, this.totalBudget - this.overview.monthExpense)
     },
@@ -136,40 +137,22 @@ export default {
       return '#67C23A'
     }
   },
-  created() {
-    this.fetchData()
-  },
-  watch: {
-    currentBook() {
-      this.fetchData()
-    }
-  },
   methods: {
     formatAmount,
     getCategoryIcon,
-    async fetchData() {
-      if (!this.currentBook) return
+    async fetchBookData() {
+      const [overviewRes, transactionsRes, budgetRes] = await Promise.all([
+        getOverview({ bookId: this.currentBook.id }),
+        getTransactions({ bookId: this.currentBook.id, page: 1, size: 5 }),
+        getBudgets({ bookId: this.currentBook.id })
+      ])
 
-      this.loading = true
-      try {
-        const [overviewRes, transactionsRes, budgetRes] = await Promise.all([
-          getOverview({ bookId: this.currentBook.id }),
-          getTransactions({ bookId: this.currentBook.id, page: 1, size: 5 }),
-          getBudgets({ bookId: this.currentBook.id })
-        ])
+      this.overview = overviewRes.data || this.overview
+      this.recentTransactions = transactionsRes.data?.records || []
 
-        this.overview = overviewRes.data || this.overview
-        this.recentTransactions = transactionsRes.data?.records || []
-
-        // 获取总预算
-        const budgets = budgetRes.data || []
-        const totalBudgetItem = budgets.find(b => b.categoryId === 0)
-        this.totalBudget = totalBudgetItem?.amount || 0
-      } catch (err) {
-        // 错误已处理
-      } finally {
-        this.loading = false
-      }
+      const budgets = budgetRes.data || []
+      const totalBudgetItem = budgets.find(b => b.categoryId === 0)
+      this.totalBudget = totalBudgetItem?.amount || 0
     },
     formatTime(date) {
       return getDateLabel(date)

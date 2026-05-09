@@ -204,13 +204,18 @@ import { getTransactions, deleteTransaction, batchDeleteTransactions } from '@/a
 import { exportCSV } from '@/api/export'
 import { formatAmount, getDateLabel } from '@/utils/format'
 import { getCategoryIcon } from '@/utils/constants'
-import { mapGetters } from 'vuex'
 import dayjs from 'dayjs'
 import { getCategories } from '@/api/category'
 import { getTags } from '@/api/tag'
+import { createBookDataMixin } from '@/mixins/useCurrentBookData'
 
 export default {
   name: 'TransactionList',
+  mixins: [createBookDataMixin([
+    function() { return this.fetchCategories() },
+    function() { return this.fetchTags() },
+    function() { return this.fetchTransactionData() }
+  ])],
   data() {
     return {
       transactions: [],
@@ -230,12 +235,10 @@ export default {
         size: 20
       },
       total: 0,
-      selectedIds: [],
-      loading: false
+      selectedIds: []
     }
   },
   computed: {
-    ...mapGetters(['currentBook']),
     filteredCategories() {
       // 根据选择的类型过滤分类
       if (!this.filters.type) {
@@ -288,59 +291,32 @@ export default {
       }
     }
   },
-  created() {
-    this.fetchCategories()
-    this.fetchTags()
-    this.fetchData()
-  },
-  watch: {
-    currentBook() {
-      this.fetchData()
-    }
-  },
   methods: {
     formatAmount,
     getCategoryIcon,
     async fetchCategories() {
-      try {
-        const res = await getCategories({ bookId: this.currentBook?.id })
-        this.categories = res.data || []
-      } catch (err) {
-        // 错误已处理
-      }
+      const res = await getCategories({ bookId: this.currentBook?.id })
+      this.categories = res.data || []
     },
     async fetchTags() {
-      try {
-        const res = await getTags({ bookId: this.currentBook?.id })
-        this.tags = res.data || []
-      } catch (err) {
-        // 错误已处理
-      }
+      const res = await getTags({ bookId: this.currentBook?.id })
+      this.tags = res.data || []
     },
-    async fetchData() {
-      if (!this.currentBook) return
-
-      this.loading = true
-      try {
-        const params = {
-          bookId: this.currentBook.id,
-          page: this.pagination.page,
-          size: this.pagination.size,
-          ...this.filters
-        }
-
-        const res = await getTransactions(params)
-        this.transactions = res.data?.records || []
-        this.total = res.data?.total || 0
-      } catch (err) {
-        // 错误已处理
-      } finally {
-        this.loading = false
+    async fetchTransactionData() {
+      const params = {
+        bookId: this.currentBook.id,
+        page: this.pagination.page,
+        size: this.pagination.size,
+        ...this.filters
       }
+
+      const res = await getTransactions(params)
+      this.transactions = res.data?.records || []
+      this.total = res.data?.total || 0
     },
     handleSearch() {
       this.pagination.page = 1
-      this.fetchData()
+      this.refreshBookData()
     },
     handleDateChange(val) {
       if (val && val.length === 2) {
@@ -354,7 +330,7 @@ export default {
     },
     handlePageChange(page) {
       this.pagination.page = page
-      this.fetchData()
+      this.refreshBookData()
     },
     handleEdit(item) {
       this.$router.push(`/transaction/edit/${item.id}`)
@@ -369,7 +345,7 @@ export default {
 
         await deleteTransaction(item.id)
         this.$message.success('删除成功')
-        this.fetchData()
+        this.refreshBookData()
       } catch (err) {
         if (err !== 'cancel') {
           // 错误已处理
@@ -389,7 +365,7 @@ export default {
         await batchDeleteTransactions(this.selectedIds)
         this.$message.success('批量删除成功')
         this.selectedIds = []
-        this.fetchData()
+        this.refreshBookData()
       } catch (err) {
         if (err !== 'cancel') {
           // 错误已处理
