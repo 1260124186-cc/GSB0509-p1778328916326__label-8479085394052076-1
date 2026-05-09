@@ -1,0 +1,59 @@
+version: '3.8'
+
+services:
+  db:
+    image: mariadb:10.11
+    container_name: smartledger-db
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: smartledger
+      MYSQL_USER: smartledger
+      MYSQL_PASSWORD: smartledger123
+    ports:
+      - "3308:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./backend/init.sql:/docker-entrypoint-initdb.d/init.sql
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - smartledger-network
+
+  backend:
+    build: ./backend
+    container_name: smartledger-backend
+    ports:
+      - "8080:8080"
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/smartledger?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
+      SPRING_DATASOURCE_USERNAME: smartledger
+      SPRING_DATASOURCE_PASSWORD: smartledger123
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - smartledger-network
+
+  frontend:
+    build: ./frontend
+    container_name: smartledger-frontend
+    ports:
+      - "3000:80"
+    volumes:
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+    depends_on:
+      - backend
+    networks:
+      - smartledger-network
+
+volumes:
+  mysql_data:
+
+networks:
+  smartledger-network:
+    driver: bridge

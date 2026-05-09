@@ -1,0 +1,329 @@
+// 主题变量
+$primary-color: #5f3dc4;
+$accent-color: #ff922b;
+$bg-color: #fff9db;
+$card-bg: #ffffff;
+$text-color: #5f3dc4;
+$income-color: #67C23A;
+$expense-color: #fa5252;
+$border-color: #5f3dc4;
+$shadow-color: #5f3dc4;
+
+// 全局重置
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background-color: $bg-color;
+  color: $text-color;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+// 滚动条美化
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba($primary-color, 0.1);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba($primary-color, 0.3);
+  border-radius: 4px;
+
+  &:hover {
+    background: rgba($primary-color, 0.5);
+  }
+}
+
+// 卡片样式
+.bubble-card {
+  background: $card-bg;
+  border: 4px solid $border-color;
+  border-radius: 25px;
+  box-shadow: 6px 6px 0px $shadow-color;
+  transition: all 0.2s ease;
+
+  &:hover {
+    transform: translate(-2px, -2px);
+    box-shadow: 10px 10px 0px $shadow-color;
+  }
+
+  &.no-hover:hover {
+    transform: none;
+    box-shadow: 6px 6px 0px $shadow-color;
+  }
+}
+
+// 手绘输入框
+.hand-input {
+  border: 3px solid $border-color;
+  border-radius: 15px;
+  padding: 12px 16px;
+  outline: none;
+  background: white;
+  width: 100%;
+  font-weight: 600;
+  transition: all 0.2s;
+  color: $text-color;
+
+  &:focus {
+    transform: translate(-2px, -2px);
+    box-shadow: 4px 4px 0px $shadow-color;
+  }
+
+  &::placeholder {
+    color: rgba($primary-color, 0.4);
+  }
+}
+
+// 手绘按钮
+.hand-btn {
+  background: $accent-color;
+  border: 3px solid $border-color;
+  box-shadow: 4px 4px 0px $shadow-color;
+  border-radius: 20px;
+  color: white;
+  font-weight: 700;
+  padding: 12px 24px;
+  cursor: pointer;
+  transition: all 0.1s;
+
+  &:active {
+    transform: translate(4px, 4px);
+    box-shadow: 0px 0px 0px $shadow-color;
+  }
+
+  &:hover {
+    opacity: 0.9;
+  }
+
+  &.secondary {
+    background: white;
+    color: $text-color;
+  }
+
+  &.danger {
+    background: $expense-color;
+  }
+}
+
+// 标签样式
+.tag-green {
+  background: #c3fae8;
+  border: 2px solid $border-color;
+  border-radius: 10px;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  color: $text-color;
+}
+
+.tag-red {
+  background: #ffe3e3;
+  border: 2px solid $border-color;
+  border-radius: 10px;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 700;
+  color: $text-color;
+}
+
+// 进度条
+.progress-bar {
+  height: 24px;
+  border: 3px solid $border-color;
+  border-radius: 12px;
+  background: #f1f3f5;
+  overflow: hidden;
+  position: relative;
+
+  .progress-fill {
+    height: 100%;
+    background: $accent-color;
+    transition: width 0.3s;
+  }
+}
+
+// 金额颜色
+.amount-income {
+  color: $income-color;
+}
+
+.amount-expense {
+  color: $expense-color;
+}
+
+// Element UI 覆盖样式
+.el-button--primary {
+  background-color: $accent-color;
+  border-color: $border-color;
+  border-width: 3px;
+  border-radius: 15px;
+  font-weight: 700;
+  box-shadow: 3px 3px 0px $shadow-color;
+
+  &:hover, &:focus {
+    background-color: darken($accent-color, 5%);
+    border-color: $border-color;
+  }
+
+  &:active {
+    transform: translate(3px, 3px);
+    box-shadow: 0px 0px 0px $shadow-color;
+  }
+}
+
+.el-input__inner {
+  border: 3px solid rgba($border-color, 0.3);
+  border-radius: 15px;
+
+  &:focus {
+    border-color: $border-color;
+    box-shadow: 3px 3px 0px rgba($shadow-color, 0.3);
+  }
+}
+
+.el-dialog {
+  border-radius: 25px;
+  border: 4px solid $border-color;
+  box-shadow: 8px 8px 0px $shadow-color;
+  overflow: hidden;
+
+  .el-dialog__header {
+    background: $bg-color;
+    border-bottom: 3px solid $border-color;
+    padding: 20px;
+
+    .el-dialog__title {
+      font-weight: 800;
+      color: $text-color;
+    }
+  }
+
+  .el-dialog__body {
+    padding: 24px;
+  }
+}
+
+.el-message-box {
+  border-radius: 20px;
+  border: 3px solid $border-color;
+  box-shadow: 6px 6px 0px $shadow-color;
+}
+
+.el-notification {
+  border-radius: 20px;
+  border: 3px solid $border-color;
+  box-shadow: 6px 6px 0px $shadow-color;
+}
+
+.el-table {
+  border-radius: 15px;
+  overflow: hidden;
+  border: 3px solid $border-color;
+
+  th.el-table__cell {
+    background: $bg-color;
+    font-weight: 700;
+  }
+}
+
+.el-pagination {
+  .el-pager li {
+    border-radius: 10px;
+    border: 2px solid transparent;
+
+    &.active {
+      background: $accent-color;
+      border-color: $border-color;
+    }
+  }
+}
+
+// el-input-number 样式优化
+.el-input-number {
+  .el-input-number__decrease,
+  .el-input-number__increase {
+    background: $bg-color;
+    border-color: rgba($border-color, 0.3);
+    color: $primary-color;
+    font-weight: 700;
+
+    &:hover {
+      background: rgba($accent-color, 0.1);
+      color: $accent-color;
+    }
+
+    i {
+      font-size: 14px;
+    }
+  }
+
+  .el-input__inner {
+    text-align: center;
+    font-weight: 700;
+    color: $primary-color;
+  }
+}
+
+// el-date-picker range separator 样式
+.el-date-editor--daterange {
+  .el-range-separator {
+    color: $primary-color;
+    font-weight: 600;
+    padding: 0 8px;
+    width: auto;
+    min-width: 24px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    line-height: 1;
+  }
+}
+
+// 动画
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-2px); }
+  75% { transform: translateX(2px); }
+}
+
+.warning-shake {
+  animation: shake 0.5s infinite;
+}
+
+// 工具类
+.font-black {
+  font-weight: 900;
+}
+
+.font-bold {
+  font-weight: 700;
+}
+
+.text-primary {
+  color: $primary-color;
+}
+
+.text-accent {
+  color: $accent-color;
+}
+
+.bg-primary {
+  background-color: $primary-color;
+}
+
+.bg-accent {
+  background-color: $accent-color;
+}
