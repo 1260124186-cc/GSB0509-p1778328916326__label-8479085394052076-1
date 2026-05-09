@@ -200,62 +200,73 @@
 </template>
 
 <script>
+import { ref, computed } from 'vue'
 import { getTransactions, deleteTransaction, batchDeleteTransactions } from '@/api/transaction'
 import { exportCSV } from '@/api/export'
 import { formatAmount, getDateLabel } from '@/utils/format'
 import { getCategoryIcon } from '@/utils/constants'
-import { mapGetters } from 'vuex'
-import dayjs from 'dayjs'
 import { getCategories } from '@/api/category'
 import { getTags } from '@/api/tag'
+import { useCurrentBookData } from '@/composables/useCurrentBookData'
+import store from '@/store'
+import dayjs from 'dayjs'
 
 export default {
   name: 'TransactionList',
-  data() {
-    return {
-      transactions: [],
-      categories: [],
-      tags: [],
-      filters: {
-        keyword: '',
-        type: null,
-        categoryId: null,
-        tagId: null,
-        startDate: '',
-        endDate: ''
-      },
-      dateRange: [],
-      pagination: {
-        page: 1,
-        size: 20
-      },
-      total: 0,
-      selectedIds: [],
-      loading: false
-    }
-  },
-  computed: {
-    ...mapGetters(['currentBook']),
-    filteredCategories() {
-      // 根据选择的类型过滤分类
-      if (!this.filters.type) {
-        return this.categories
-      }
-      return this.categories.filter(cat => cat.type === this.filters.type)
-    },
-    groupedTransactions() {
-      const groups = {}
+  setup(_, { root }) {
+    const filters = ref({
+      keyword: '',
+      type: null,
+      categoryId: null,
+      tagId: null,
+      startDate: '',
+      endDate: ''
+    })
+    const dateRange = ref([])
+    const pagination = ref({ page: 1, size: 20 })
+    const selectedIds = ref([])
 
-      this.transactions.forEach(item => {
+    const currentBook = computed(() => store.getters.currentBook)
+
+    const { data, loading, refresh } = useCurrentBookData(
+      async (book) => {
+        const [txRes, catRes, tagRes] = await Promise.all([
+          getTransactions({
+            bookId: book.id,
+            page: pagination.value.page,
+            size: pagination.value.size,
+            ...filters.value
+          }),
+          getCategories({ bookId: book.id }),
+          getTags({ bookId: book.id })
+        ])
+
+        return {
+          transactions: txRes.data?.records || [],
+          total: txRes.data?.total || 0,
+          categories: catRes.data || [],
+          tags: tagRes.data || []
+        }
+      },
+      { extraDeps: [filters, pagination] }
+    )
+
+    const transactions = computed(() => data.value?.transactions || [])
+    const total = computed(() => data.value?.total || 0)
+    const categories = computed(() => data.value?.categories || [])
+    const tags = computed(() => data.value?.tags || [])
+
+    const filteredCategories = computed(() => {
+      if (!filters.value.type) return categories.value
+      return categories.value.filter(cat => cat.type === filters.value.type)
+    })
+
+    const groupedTransactions = computed(() => {
+      const groups = {}
+      transactions.value.forEach(item => {
         const date = item.transactionDate
         if (!groups[date]) {
-          groups[date] = {
-            date,
-            dateLabel: getDateLabel(date),
-            records: [],
-            income: 0,
-            expense: 0
-          }
+          groups[date] = { date, dateLabel: getDateLabel(date), records: [], income: 0, expense: 0 }
         }
         groups[date].records.push(item)
         if (item.type === 1) {
@@ -264,145 +275,78 @@ export default {
           groups[date].expense += parseFloat(item.amount)
         }
       })
+      return Object.values(groups).sort((a, b) => dayjs(b.date).valueOf() - dayjs(a.date).valueOf())
+    })
 
-      return Object.values(groups).sort((a, b) =>
-        dayjs(b.date).valueOf() - dayjs(a.date).valueOf()
-      )
-    },
-    summary() {
+    const summary = computed(() => {
       let income = 0
       let expense = 0
-
-      this.transactions.forEach(item => {
-        if (item.type === 1) {
-          income += parseFloat(item.amount)
-        } else {
-          expense += parseFloat(item.amount)
-        }
+      transactions.value.forEach(item => {
+        if (item.type === 1) income += parseFloat(item.amount)
+        else expense += parseFloat(item.amount)
       })
+      return { income, expense, balance: income - expense }
+    })
 
-      return {
-        income,
-        expense,
-        balance: income - expense
-      }
+    function handleSearch() {
+      pagination.value = { ...pagination.value, page: 1 }
     }
-  },
-  created() {
-    this.fetchCategories()
-    this.fetchTags()
-    this.fetchData()
-  },
-  watch: {
-    currentBook() {
-      this.fetchData()
-    }
-  },
-  methods: {
-    formatAmount,
-    getCategoryIcon,
-    async fetchCategories() {
-      try {
-        const res = await getCategories({ bookId: this.currentBook?.id })
-        this.categories = res.data || []
-      } catch (err) {
-        // 错误已处理
-      }
-    },
-    async fetchTags() {
-      try {
-        const res = await getTags({ bookId: this.currentBook?.id })
-        this.tags = res.data || []
-      } catch (err) {
-        // 错误已处理
-      }
-    },
-    async fetchData() {
-      if (!this.currentBook) return
 
-      this.loading = true
-      try {
-        const params = {
-          bookId: this.currentBook.id,
-          page: this.pagination.page,
-          size: this.pagination.size,
-          ...this.filters
-        }
-
-        const res = await getTransactions(params)
-        this.transactions = res.data?.records || []
-        this.total = res.data?.total || 0
-      } catch (err) {
-        // 错误已处理
-      } finally {
-        this.loading = false
-      }
-    },
-    handleSearch() {
-      this.pagination.page = 1
-      this.fetchData()
-    },
-    handleDateChange(val) {
+    function handleDateChange(val) {
       if (val && val.length === 2) {
-        this.filters.startDate = val[0]
-        this.filters.endDate = val[1]
+        filters.value = { ...filters.value, startDate: val[0], endDate: val[1] }
       } else {
-        this.filters.startDate = ''
-        this.filters.endDate = ''
+        filters.value = { ...filters.value, startDate: '', endDate: '' }
       }
-      this.handleSearch()
-    },
-    handlePageChange(page) {
-      this.pagination.page = page
-      this.fetchData()
-    },
-    handleEdit(item) {
-      this.$router.push(`/transaction/edit/${item.id}`)
-    },
-    async handleDelete(item) {
+      handleSearch()
+    }
+
+    function handlePageChange(page) {
+      pagination.value = { ...pagination.value, page }
+    }
+
+    function handleEdit(item) {
+      root.$router.push(`/transaction/edit/${item.id}`)
+    }
+
+    async function handleDelete(item) {
       try {
-        await this.$confirm('确定要删除这条记录吗?', '提示', {
+        await root.$confirm('确定要删除这条记录吗?', '提示', {
           confirmButtonText: '确定',
           cancelButtonText: '取消',
           type: 'warning'
         })
-
         await deleteTransaction(item.id)
-        this.$message.success('删除成功')
-        this.fetchData()
+        root.$message.success('删除成功')
+        refresh()
       } catch (err) {
-        if (err !== 'cancel') {
-          // 错误已处理
-        }
+        if (err !== 'cancel') {}
       }
-    },
-    async handleBatchDelete() {
-      if (this.selectedIds.length === 0) return
+    }
 
+    async function handleBatchDelete() {
+      if (selectedIds.value.length === 0) return
       try {
-        await this.$confirm(`确定要删除选中的 ${this.selectedIds.length} 条记录吗?`, '提示', {
+        await root.$confirm(`确定要删除选中的 ${selectedIds.value.length} 条记录吗?`, '提示', {
           confirmButtonText: '确定',
           cancelButtonText: '取消',
           type: 'warning'
         })
-
-        await batchDeleteTransactions(this.selectedIds)
-        this.$message.success('批量删除成功')
-        this.selectedIds = []
-        this.fetchData()
+        await batchDeleteTransactions(selectedIds.value)
+        root.$message.success('批量删除成功')
+        selectedIds.value = []
+        refresh()
       } catch (err) {
-        if (err !== 'cancel') {
-          // 错误已处理
-        }
+        if (err !== 'cancel') {}
       }
-    },
-    async handleExport() {
+    }
+
+    async function handleExport() {
       try {
         const params = {
-          bookId: this.currentBook.id,
-          ...this.filters
+          bookId: currentBook.value?.id,
+          ...filters.value
         }
-
         const res = await exportCSV(params)
         const blob = new Blob([res], { type: 'text/csv;charset=utf-8' })
         const url = window.URL.createObjectURL(blob)
@@ -411,11 +355,32 @@ export default {
         link.download = `记账记录_${dayjs().format('YYYYMMDD')}.csv`
         link.click()
         window.URL.revokeObjectURL(url)
+        root.$message.success('导出成功')
+      } catch (err) {}
+    }
 
-        this.$message.success('导出成功')
-      } catch (err) {
-        // 错误已处理
-      }
+    return {
+      filters,
+      dateRange,
+      pagination,
+      selectedIds,
+      loading,
+      transactions,
+      total,
+      categories,
+      tags,
+      filteredCategories,
+      groupedTransactions,
+      summary,
+      handleSearch,
+      handleDateChange,
+      handlePageChange,
+      handleEdit,
+      handleDelete,
+      handleBatchDelete,
+      handleExport,
+      formatAmount,
+      getCategoryIcon
     }
   }
 }

@@ -160,201 +160,187 @@
 </template>
 
 <script>
+import { ref, computed, watch } from 'vue'
 import { getBudgets, saveBudget, deleteBudget } from '@/api/budget'
 import { getCategories } from '@/api/category'
 import { getCategoryStats } from '@/api/statistics'
 import { formatAmount, getCurrentYearMonth, getMonthRange } from '@/utils/format'
 import { getCategoryIcon } from '@/utils/constants'
-import { mapGetters } from 'vuex'
+import { useCurrentBookData } from '@/composables/useCurrentBookData'
+import store from '@/store'
 import dayjs from 'dayjs'
 
 export default {
   name: 'Budget',
-  data() {
-    return {
-      budgets: [],
-      categories: [],
-      categorySpending: {},
-      totalSpent: 0,
-      showTotalBudgetDialog: false,
-      showCategoryBudgetDialog: false,
-      totalBudgetForm: {
-        amount: 0
-      },
-      categoryBudgetForm: {
-        id: null,
-        categoryId: null,
-        amount: 0
-      }
-    }
-  },
-  computed: {
-    ...mapGetters(['currentBook']),
-    currentMonth() {
-      return dayjs().format('M')
-    },
-    yearMonth() {
-      return getCurrentYearMonth()
-    },
-    totalBudget() {
-      return this.budgets.find(b => b.categoryId === 0)
-    },
-    categoryBudgets() {
-      return this.budgets
+  setup(_, { root }) {
+    const showTotalBudgetDialog = ref(false)
+    const showCategoryBudgetDialog = ref(false)
+    const totalBudgetForm = ref({ amount: 0 })
+    const categoryBudgetForm = ref({ id: null, categoryId: null, amount: 0 })
+
+    const currentBook = computed(() => store.getters.currentBook)
+    const yearMonth = getCurrentYearMonth()
+
+    const { data, refresh } = useCurrentBookData(async (book) => {
+      const dateRange = getMonthRange(yearMonth)
+
+      const [budgetRes, categoryRes, statsRes] = await Promise.all([
+        getBudgets({ bookId: book.id, yearMonth }),
+        getCategories(),
+        getCategoryStats({ bookId: book.id, type: 2, ...dateRange })
+      ])
+
+      const budgets = budgetRes.data || []
+      const categories = categoryRes.data || []
+      const stats = statsRes.data || []
+
+      const categorySpending = {}
+      let totalSpent = 0
+      stats.forEach(item => {
+        categorySpending[item.categoryId] = item.amount
+        totalSpent += item.amount
+      })
+
+      return { budgets, categories, categorySpending, totalSpent }
+    })
+
+    const budgets = computed(() => data.value?.budgets || [])
+    const categories = computed(() => data.value?.categories || [])
+    const categorySpending = computed(() => data.value?.categorySpending || {})
+    const totalSpent = computed(() => data.value?.totalSpent || 0)
+
+    const currentMonth = dayjs().format('M')
+
+    const totalBudget = computed(() => budgets.value.find(b => b.categoryId === 0))
+    const categoryBudgets = computed(() =>
+      budgets.value
         .filter(b => b.categoryId !== 0)
         .map(b => ({
           ...b,
-          categoryName: this.getCategoryName(b.categoryId),
-          spent: this.categorySpending[b.categoryId] || 0
+          categoryName: getCategoryName(b.categoryId),
+          spent: categorySpending.value[b.categoryId] || 0
         }))
-    },
-    expenseCategories() {
-      return this.categories.filter(c => c.type === 2 && !c.isHidden)
-    },
-    budgetProgress() {
-      if (!this.totalBudget || this.totalBudget.amount === 0) return 0
-      return Math.min(100, (this.totalSpent / this.totalBudget.amount) * 100)
-    },
-    isOverBudget() {
-      return this.totalBudget && this.totalSpent > this.totalBudget.amount
-    },
-    progressColor() {
-      if (this.budgetProgress >= 100) return '#fa5252'
-      if (this.budgetProgress >= 80) return '#ff922b'
+    )
+    const expenseCategories = computed(() => categories.value.filter(c => c.type === 2 && !c.isHidden))
+
+    const budgetProgress = computed(() => {
+      if (!totalBudget.value || totalBudget.value.amount === 0) return 0
+      return Math.min(100, (totalSpent.value / totalBudget.value.amount) * 100)
+    })
+    const isOverBudget = computed(() => totalBudget.value && totalSpent.value > totalBudget.value.amount)
+    const progressColor = computed(() => {
+      if (budgetProgress.value >= 100) return '#fa5252'
+      if (budgetProgress.value >= 80) return '#ff922b'
       return '#67C23A'
-    }
-  },
-  created() {
-    this.fetchData()
-  },
-  watch: {
-    currentBook() {
-      this.fetchData()
-    }
-  },
-  methods: {
-    formatAmount,
-    getCategoryIcon,
-    getCategoryName(categoryId) {
-      const cat = this.categories.find(c => c.id === categoryId)
+    })
+
+    watch(showTotalBudgetDialog, (val) => {
+      if (val && totalBudget.value) {
+        totalBudgetForm.value.amount = totalBudget.value.amount
+      }
+    })
+
+    watch(showCategoryBudgetDialog, (val) => {
+      if (!val) {
+        categoryBudgetForm.value = { id: null, categoryId: null, amount: 0 }
+      }
+    })
+
+    function getCategoryName(categoryId) {
+      const cat = categories.value.find(c => c.id === categoryId)
       return cat?.name || '未知'
-    },
-    getCategoryProgress(budget) {
+    }
+
+    function getCategoryProgress(budget) {
       if (budget.amount === 0) return 0
       return Math.min(100, (budget.spent / budget.amount) * 100)
-    },
-    getCategoryProgressColor(budget) {
-      const progress = this.getCategoryProgress(budget)
+    }
+
+    function getCategoryProgressColor(budget) {
+      const progress = getCategoryProgress(budget)
       if (progress >= 100) return '#fa5252'
       if (progress >= 80) return '#ff922b'
       return '#67C23A'
-    },
-    async fetchData() {
-      if (!this.currentBook) return
+    }
 
-      try {
-        const dateRange = getMonthRange(this.yearMonth)
-
-        const [budgetRes, categoryRes, statsRes] = await Promise.all([
-          getBudgets({ bookId: this.currentBook.id, yearMonth: this.yearMonth }),
-          getCategories(),
-          getCategoryStats({
-            bookId: this.currentBook.id,
-            type: 2,
-            ...dateRange
-          })
-        ])
-
-        this.budgets = budgetRes.data || []
-        this.categories = categoryRes.data || []
-
-        // 计算各分类支出
-        const stats = statsRes.data || []
-        this.categorySpending = {}
-        this.totalSpent = 0
-
-        stats.forEach(item => {
-          this.categorySpending[item.categoryId] = item.amount
-          this.totalSpent += item.amount
-        })
-      } catch (err) {
-        // 错误已处理
-      }
-    },
-    async saveTotalBudget() {
+    async function saveTotalBudget() {
       try {
         await saveBudget({
-          bookId: this.currentBook.id,
+          bookId: currentBook.value.id,
           categoryId: 0,
-          yearMonth: this.yearMonth,
-          amount: this.totalBudgetForm.amount
+          yearMonth,
+          amount: totalBudgetForm.value.amount
         })
+        root.$message.success('保存成功')
+        showTotalBudgetDialog.value = false
+        refresh()
+      } catch (err) {}
+    }
 
-        this.$message.success('保存成功')
-        this.showTotalBudgetDialog = false
-        this.fetchData()
-      } catch (err) {
-        // 错误已处理
-      }
-    },
-    editCategoryBudget(budget) {
-      this.categoryBudgetForm = {
+    function editCategoryBudget(budget) {
+      categoryBudgetForm.value = {
         id: budget.id,
         categoryId: budget.categoryId,
         amount: budget.amount
       }
-      this.showCategoryBudgetDialog = true
-    },
-    async saveCategoryBudget() {
-      if (!this.categoryBudgetForm.categoryId) {
-        this.$message.warning('请选择分类')
+      showCategoryBudgetDialog.value = true
+    }
+
+    async function saveCategoryBudget() {
+      if (!categoryBudgetForm.value.categoryId) {
+        root.$message.warning('请选择分类')
         return
       }
 
       try {
         await saveBudget({
-          bookId: this.currentBook.id,
-          categoryId: this.categoryBudgetForm.categoryId,
-          yearMonth: this.yearMonth,
-          amount: this.categoryBudgetForm.amount
+          bookId: currentBook.value.id,
+          categoryId: categoryBudgetForm.value.categoryId,
+          yearMonth,
+          amount: categoryBudgetForm.value.amount
         })
+        root.$message.success('保存成功')
+        showCategoryBudgetDialog.value = false
+        categoryBudgetForm.value = { id: null, categoryId: null, amount: 0 }
+        refresh()
+      } catch (err) {}
+    }
 
-        this.$message.success('保存成功')
-        this.showCategoryBudgetDialog = false
-        this.categoryBudgetForm = { id: null, categoryId: null, amount: 0 }
-        this.fetchData()
-      } catch (err) {
-        // 错误已处理
-      }
-    },
-    async deleteCategoryBudget(budget) {
+    async function deleteCategoryBudget(budget) {
       try {
-        await this.$confirm('确定要删除这个分类预算吗?', '提示', {
+        await root.$confirm('确定要删除这个分类预算吗?', '提示', {
           confirmButtonText: '确定',
           cancelButtonText: '取消',
           type: 'warning'
         })
-
         await deleteBudget(budget.id)
-        this.$message.success('删除成功')
-        this.fetchData()
+        root.$message.success('删除成功')
+        refresh()
       } catch (err) {
-        if (err !== 'cancel') {
-          // 错误已处理
-        }
+        if (err !== 'cancel') {}
       }
     }
-  },
-  watch: {
-    showTotalBudgetDialog(val) {
-      if (val && this.totalBudget) {
-        this.totalBudgetForm.amount = this.totalBudget.amount
-      }
-    },
-    showCategoryBudgetDialog(val) {
-      if (!val) {
-        this.categoryBudgetForm = { id: null, categoryId: null, amount: 0 }
-      }
+
+    return {
+      showTotalBudgetDialog,
+      showCategoryBudgetDialog,
+      totalBudgetForm,
+      categoryBudgetForm,
+      currentMonth,
+      totalBudget,
+      categoryBudgets,
+      expenseCategories,
+      budgetProgress,
+      isOverBudget,
+      progressColor,
+      saveTotalBudget,
+      editCategoryBudget,
+      saveCategoryBudget,
+      deleteCategoryBudget,
+      getCategoryProgress,
+      getCategoryProgressColor,
+      formatAmount,
+      getCategoryIcon
     }
   }
 }

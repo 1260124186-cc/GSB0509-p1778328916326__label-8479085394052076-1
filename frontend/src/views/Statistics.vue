@@ -17,18 +17,18 @@
     <!-- 收支趋势图 -->
     <div class="bubble-card chart-card no-hover">
       <h3>收支趋势</h3>
-      <div class="chart-container" ref="trendChart"></div>
+      <div class="chart-container" ref="trendChartRef"></div>
     </div>
 
     <!-- 分类占比 -->
     <div class="charts-row">
       <div class="bubble-card chart-card no-hover">
         <h3>支出分类</h3>
-        <div class="chart-container" ref="expenseChart"></div>
+        <div class="chart-container" ref="expenseChartRef"></div>
       </div>
       <div class="bubble-card chart-card no-hover">
         <h3>收入分类</h3>
-        <div class="chart-container" ref="incomeChart"></div>
+        <div class="chart-container" ref="incomeChartRef"></div>
       </div>
     </div>
 
@@ -65,36 +65,35 @@
 </template>
 
 <script>
+import { ref, computed, nextTick } from 'vue'
 import * as echarts from 'echarts'
 import { getTrend, getCategoryStats } from '@/api/statistics'
 import { formatAmount, getMonthRange, getWeekRange, getYearRange } from '@/utils/format'
 import { getCategoryIcon } from '@/utils/constants'
-import { mapGetters } from 'vuex'
+import { useCurrentBookData } from '@/composables/useCurrentBookData'
 import dayjs from 'dayjs'
 
 export default {
   name: 'Statistics',
-  data() {
-    return {
-      period: 'month',
-      periods: [
-        { value: 'week', label: '本周' },
-        { value: 'month', label: '本月' },
-        { value: 'year', label: '本年' }
-      ],
-      trendData: { labels: [], income: [], expense: [] },
-      expenseCategories: [],
-      incomeCategories: [],
-      detailType: 2,
-      trendChartInstance: null,
-      expenseChartInstance: null,
-      incomeChartInstance: null
-    }
-  },
-  computed: {
-    ...mapGetters(['currentBook']),
-    dateRange() {
-      switch (this.period) {
+  setup() {
+    const period = ref('month')
+    const detailType = ref(2)
+    const trendChartRef = ref(null)
+    const expenseChartRef = ref(null)
+    const incomeChartRef = ref(null)
+
+    let trendChartInstance = null
+    let expenseChartInstance = null
+    let incomeChartInstance = null
+
+    const periods = [
+      { value: 'week', label: '本周' },
+      { value: 'month', label: '本月' },
+      { value: 'year', label: '本年' }
+    ]
+
+    const dateRange = computed(() => {
+      switch (period.value) {
         case 'week':
           return getWeekRange()
         case 'month':
@@ -104,61 +103,14 @@ export default {
         default:
           return getMonthRange(dayjs().format('YYYY-MM'))
       }
-    },
-    categoryDetails() {
-      const data = this.detailType === 1 ? this.incomeCategories : this.expenseCategories
-      const colors = ['#ff922b', '#748ffc', '#69db7c', '#f06595', '#ffd43b', '#4dabf7', '#20c997', '#da77f2']
+    })
 
-      return data.map((item, index) => ({
-        ...item,
-        color: colors[index % colors.length]
-      }))
-    }
-  },
-  mounted() {
-    this.initCharts()
-    this.fetchData()
-  },
-  beforeDestroy() {
-    this.destroyCharts()
-  },
-  watch: {
-    period() {
-      this.fetchData()
-    },
-    currentBook() {
-      this.fetchData()
-    }
-  },
-  methods: {
-    formatAmount,
-    getCategoryIcon,
-    initCharts() {
-      this.trendChartInstance = echarts.init(this.$refs.trendChart)
-      this.expenseChartInstance = echarts.init(this.$refs.expenseChart)
-      this.incomeChartInstance = echarts.init(this.$refs.incomeChart)
-
-      window.addEventListener('resize', this.handleResize)
-    },
-    destroyCharts() {
-      window.removeEventListener('resize', this.handleResize)
-      this.trendChartInstance?.dispose()
-      this.expenseChartInstance?.dispose()
-      this.incomeChartInstance?.dispose()
-    },
-    handleResize() {
-      this.trendChartInstance?.resize()
-      this.expenseChartInstance?.resize()
-      this.incomeChartInstance?.resize()
-    },
-    async fetchData() {
-      if (!this.currentBook) return
-
-      try {
+    const { data, loading } = useCurrentBookData(
+      async (book) => {
         const params = {
-          bookId: this.currentBook.id,
-          period: this.period,
-          ...this.dateRange
+          bookId: book.id,
+          period: period.value,
+          ...dateRange.value
         }
 
         const [trendRes, expenseRes, incomeRes] = await Promise.all([
@@ -167,100 +119,113 @@ export default {
           getCategoryStats({ ...params, type: 1 })
         ])
 
-        this.trendData = trendRes.data || { labels: [], income: [], expense: [] }
-        this.expenseCategories = expenseRes.data || []
-        this.incomeCategories = incomeRes.data || []
-
-        this.updateCharts()
-      } catch (err) {
-        // 错误已处理
+        return {
+          trendData: trendRes.data || { labels: [], income: [], expense: [] },
+          expenseCategories: expenseRes.data || [],
+          incomeCategories: incomeRes.data || []
+        }
+      },
+      {
+        extraDeps: period,
+        onFetched: () => {
+          nextTick(() => updateCharts())
+        }
       }
-    },
-    updateCharts() {
-      // 趋势图
-      this.trendChartInstance.setOption({
-        tooltip: {
-          trigger: 'axis'
-        },
-        legend: {
-          data: ['收入', '支出'],
-          bottom: 0
-        },
-        grid: {
-          left: '3%',
-          right: '4%',
-          top: '10%',
-          bottom: '15%',
-          containLabel: true
-        },
-        xAxis: {
-          type: 'category',
-          data: this.trendData.labels,
-          axisLine: { lineStyle: { color: '#5f3dc4' } }
-        },
-        yAxis: {
-          type: 'value',
-          axisLine: { lineStyle: { color: '#5f3dc4' } }
-        },
+    )
+
+    const trendData = computed(() => data.value?.trendData || { labels: [], income: [], expense: [] })
+    const expenseCategories = computed(() => data.value?.expenseCategories || [])
+    const incomeCategories = computed(() => data.value?.incomeCategories || [])
+    const categoryDetails = computed(() => {
+      const items = detailType.value === 1 ? incomeCategories.value : expenseCategories.value
+      const colors = ['#ff922b', '#748ffc', '#69db7c', '#f06595', '#ffd43b', '#4dabf7', '#20c997', '#da77f2']
+      return items.map((item, index) => ({ ...item, color: colors[index % colors.length] }))
+    })
+
+    function initCharts() {
+      if (trendChartRef.value) trendChartInstance = echarts.init(trendChartRef.value)
+      if (expenseChartRef.value) expenseChartInstance = echarts.init(expenseChartRef.value)
+      if (incomeChartRef.value) incomeChartInstance = echarts.init(incomeChartRef.value)
+      window.addEventListener('resize', handleResize)
+    }
+
+    function destroyCharts() {
+      window.removeEventListener('resize', handleResize)
+      trendChartInstance?.dispose()
+      expenseChartInstance?.dispose()
+      incomeChartInstance?.dispose()
+    }
+
+    function handleResize() {
+      trendChartInstance?.resize()
+      expenseChartInstance?.resize()
+      incomeChartInstance?.resize()
+    }
+
+    function updateCharts() {
+      if (!trendChartInstance) return
+
+      trendChartInstance.setOption({
+        tooltip: { trigger: 'axis' },
+        legend: { data: ['收入', '支出'], bottom: 0 },
+        grid: { left: '3%', right: '4%', top: '10%', bottom: '15%', containLabel: true },
+        xAxis: { type: 'category', data: trendData.value.labels, axisLine: { lineStyle: { color: '#5f3dc4' } } },
+        yAxis: { type: 'value', axisLine: { lineStyle: { color: '#5f3dc4' } } },
         series: [
-          {
-            name: '收入',
-            type: 'bar',
-            data: this.trendData.income,
-            itemStyle: { color: '#67C23A', borderRadius: [8, 8, 0, 0] }
-          },
-          {
-            name: '支出',
-            type: 'bar',
-            data: this.trendData.expense,
-            itemStyle: { color: '#fa5252', borderRadius: [8, 8, 0, 0] }
-          }
+          { name: '收入', type: 'bar', data: trendData.value.income, itemStyle: { color: '#67C23A', borderRadius: [8, 8, 0, 0] } },
+          { name: '支出', type: 'bar', data: trendData.value.expense, itemStyle: { color: '#fa5252', borderRadius: [8, 8, 0, 0] } }
         ]
       })
 
-      // 支出饼图
-      this.updatePieChart(this.expenseChartInstance, this.expenseCategories)
+      updatePieChart(expenseChartInstance, expenseCategories.value)
+      updatePieChart(incomeChartInstance, incomeCategories.value)
+    }
 
-      // 收入饼图
-      this.updatePieChart(this.incomeChartInstance, this.incomeCategories)
-    },
-    updatePieChart(chart, data) {
+    function updatePieChart(chart, chartData) {
+      if (!chart) return
       const colors = ['#ff922b', '#748ffc', '#69db7c', '#f06595', '#ffd43b', '#4dabf7', '#20c997', '#da77f2']
-
       chart.setOption({
-        tooltip: {
-          trigger: 'item',
-          formatter: '{b}: ¥{c} ({d}%)'
-        },
-        series: [
-          {
-            type: 'pie',
-            radius: ['40%', '70%'],
-            avoidLabelOverlap: false,
-            itemStyle: {
-              borderRadius: 8,
-              borderColor: '#5f3dc4',
-              borderWidth: 2
-            },
-            label: {
-              show: false
-            },
-            emphasis: {
-              label: {
-                show: true,
-                fontSize: 14,
-                fontWeight: 'bold'
-              }
-            },
-            data: data.map((item, index) => ({
-              value: item.amount,
-              name: item.categoryName,
-              itemStyle: { color: colors[index % colors.length] }
-            }))
-          }
-        ]
+        tooltip: { trigger: 'item', formatter: '{b}: ¥{c} ({d}%)' },
+        series: [{
+          type: 'pie',
+          radius: ['40%', '70%'],
+          avoidLabelOverlap: false,
+          itemStyle: { borderRadius: 8, borderColor: '#5f3dc4', borderWidth: 2 },
+          label: { show: false },
+          emphasis: { label: { show: true, fontSize: 14, fontWeight: 'bold' } },
+          data: chartData.map((item, index) => ({
+            value: item.amount,
+            name: item.categoryName,
+            itemStyle: { color: colors[index % colors.length] }
+          }))
+        }]
       })
     }
+
+    return {
+      period,
+      periods,
+      detailType,
+      loading,
+      trendData,
+      expenseCategories,
+      incomeCategories,
+      categoryDetails,
+      trendChartRef,
+      expenseChartRef,
+      incomeChartRef,
+      initCharts,
+      destroyCharts,
+      handleResize,
+      formatAmount,
+      getCategoryIcon
+    }
+  },
+  mounted() {
+    this.initCharts()
+  },
+  beforeDestroy() {
+    this.destroyCharts()
   }
 }
 </script>
