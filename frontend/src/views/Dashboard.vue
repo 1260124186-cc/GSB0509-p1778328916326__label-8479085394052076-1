@@ -88,91 +88,80 @@
 </template>
 
 <script>
+import { computed } from 'vue'
 import { getOverview } from '@/api/statistics'
 import { getTransactions } from '@/api/transaction'
 import { getBudgets } from '@/api/budget'
 import { formatAmount, getDateLabel } from '@/utils/format'
 import { getCategoryIcon } from '@/utils/constants'
-import { mapGetters } from 'vuex'
+import { useCurrentBookData } from '@/composables/useCurrentBookData'
+
+const DEFAULT_OVERVIEW = {
+  todayIncome: 0,
+  todayExpense: 0,
+  weekIncome: 0,
+  weekExpense: 0,
+  monthIncome: 0,
+  monthExpense: 0,
+  yearIncome: 0,
+  yearExpense: 0
+}
 
 export default {
   name: 'Dashboard',
-  data() {
-    return {
-      overview: {
-        todayIncome: 0,
-        todayExpense: 0,
-        weekIncome: 0,
-        weekExpense: 0,
-        monthIncome: 0,
-        monthExpense: 0,
-        yearIncome: 0,
-        yearExpense: 0
-      },
-      recentTransactions: [],
-      totalBudget: 0,
-      loading: false
-    }
-  },
-  computed: {
-    ...mapGetters(['currentBook']),
-    remainingBudget() {
-      return Math.max(0, this.totalBudget - this.overview.monthExpense)
-    },
-    budgetProgress() {
-      if (this.totalBudget === 0) return 0
-      return Math.min(100, (this.overview.monthExpense / this.totalBudget) * 100)
-    },
-    budgetWarning() {
-      return this.totalBudget > 0 && this.overview.monthExpense > this.totalBudget
-    },
-    budgetPercentage() {
-      if (this.totalBudget === 0) return 0
-      return Math.round(((this.overview.monthExpense - this.totalBudget) / this.totalBudget) * 100)
-    },
-    budgetColor() {
-      if (this.budgetProgress >= 100) return '#fa5252'
-      if (this.budgetProgress >= 80) return '#ff922b'
+  setup() {
+    const { data, loading } = useCurrentBookData(async (book) => {
+      const [overviewRes, transactionsRes, budgetRes] = await Promise.all([
+        getOverview({ bookId: book.id }),
+        getTransactions({ bookId: book.id, page: 1, size: 5 }),
+        getBudgets({ bookId: book.id })
+      ])
+
+      const overview = overviewRes.data || {}
+      const recentTransactions = transactionsRes.data?.records || []
+      const budgets = budgetRes.data || []
+      const totalBudgetItem = budgets.find(b => b.categoryId === 0)
+
+      return { overview, recentTransactions, totalBudget: totalBudgetItem?.amount || 0 }
+    })
+
+    const overview = computed(() => ({ ...DEFAULT_OVERVIEW, ...(data.value?.overview || {}) }))
+    const recentTransactions = computed(() => data.value?.recentTransactions || [])
+    const totalBudget = computed(() => data.value?.totalBudget || 0)
+
+    const remainingBudget = computed(() =>
+      Math.max(0, totalBudget.value - overview.value.monthExpense)
+    )
+    const budgetProgress = computed(() => {
+      if (totalBudget.value === 0) return 0
+      return Math.min(100, (overview.value.monthExpense / totalBudget.value) * 100)
+    })
+    const budgetWarning = computed(() =>
+      totalBudget.value > 0 && overview.value.monthExpense > totalBudget.value
+    )
+    const budgetPercentage = computed(() => {
+      if (totalBudget.value === 0) return 0
+      return Math.round(((overview.value.monthExpense - totalBudget.value) / totalBudget.value) * 100)
+    })
+    const budgetColor = computed(() => {
+      if (budgetProgress.value >= 100) return '#fa5252'
+      if (budgetProgress.value >= 80) return '#ff922b'
       return '#67C23A'
-    }
-  },
-  created() {
-    this.fetchData()
-  },
-  watch: {
-    currentBook() {
-      this.fetchData()
-    }
-  },
-  methods: {
-    formatAmount,
-    getCategoryIcon,
-    async fetchData() {
-      if (!this.currentBook) return
+    })
 
-      this.loading = true
-      try {
-        const [overviewRes, transactionsRes, budgetRes] = await Promise.all([
-          getOverview({ bookId: this.currentBook.id }),
-          getTransactions({ bookId: this.currentBook.id, page: 1, size: 5 }),
-          getBudgets({ bookId: this.currentBook.id })
-        ])
-
-        this.overview = overviewRes.data || this.overview
-        this.recentTransactions = transactionsRes.data?.records || []
-
-        // 获取总预算
-        const budgets = budgetRes.data || []
-        const totalBudgetItem = budgets.find(b => b.categoryId === 0)
-        this.totalBudget = totalBudgetItem?.amount || 0
-      } catch (err) {
-        // 错误已处理
-      } finally {
-        this.loading = false
-      }
-    },
-    formatTime(date) {
-      return getDateLabel(date)
+    return {
+      loading,
+      overview,
+      recentTransactions,
+      totalBudget,
+      remainingBudget,
+      budgetProgress,
+      budgetWarning,
+      budgetPercentage,
+      budgetColor,
+      formatAmount,
+      getCategoryIcon,
+      formatTime: (date) => getDateLabel(date)
     }
   }
 }
