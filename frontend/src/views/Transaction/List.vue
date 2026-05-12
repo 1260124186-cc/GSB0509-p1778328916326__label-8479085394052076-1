@@ -204,13 +204,14 @@ import { getTransactions, deleteTransaction, batchDeleteTransactions } from '@/a
 import { exportCSV } from '@/api/export'
 import { formatAmount, getDateLabel } from '@/utils/format'
 import { getCategoryIcon } from '@/utils/constants'
-import { mapGetters } from 'vuex'
+import { currentBookDataMixin } from '@/mixins/currentBookData'
 import dayjs from 'dayjs'
 import { getCategories } from '@/api/category'
 import { getTags } from '@/api/tag'
 
 export default {
   name: 'TransactionList',
+  mixins: [currentBookDataMixin],
   data() {
     return {
       transactions: [],
@@ -235,7 +236,6 @@ export default {
     }
   },
   computed: {
-    ...mapGetters(['currentBook']),
     filteredCategories() {
       // 根据选择的类型过滤分类
       if (!this.filters.type) {
@@ -289,41 +289,34 @@ export default {
     }
   },
   created() {
-    this.fetchCategories()
-    this.fetchTags()
-    this.fetchData()
-  },
-  watch: {
-    currentBook() {
-      this.fetchData()
-    }
+    this.fetchCategories = this.watchCurrentBook(this.fetchCategories)
+    this.fetchTags = this.watchCurrentBook(this.fetchTags)
+    this.fetchData = this.watchCurrentBook(this.fetchData)
   },
   methods: {
     formatAmount,
     getCategoryIcon,
-    async fetchCategories() {
+    async fetchCategories(currentBook) {
       try {
-        const res = await getCategories({ bookId: this.currentBook?.id })
+        const res = await getCategories({ bookId: currentBook.id })
         this.categories = res.data || []
       } catch (err) {
         // 错误已处理
       }
     },
-    async fetchTags() {
+    async fetchTags(currentBook) {
       try {
-        const res = await getTags({ bookId: this.currentBook?.id })
+        const res = await getTags({ bookId: currentBook.id })
         this.tags = res.data || []
       } catch (err) {
         // 错误已处理
       }
     },
-    async fetchData() {
-      if (!this.currentBook) return
-
+    async fetchData(currentBook) {
       this.loading = true
       try {
         const params = {
-          bookId: this.currentBook.id,
+          bookId: currentBook.id,
           page: this.pagination.page,
           size: this.pagination.size,
           ...this.filters
