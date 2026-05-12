@@ -165,11 +165,12 @@ import { getCategories } from '@/api/category'
 import { getCategoryStats } from '@/api/statistics'
 import { formatAmount, getCurrentYearMonth, getMonthRange } from '@/utils/format'
 import { getCategoryIcon } from '@/utils/constants'
-import { mapGetters } from 'vuex'
+import { currentBookDataMixin } from '@/mixins/currentBookData'
 import dayjs from 'dayjs'
 
 export default {
   name: 'Budget',
+  mixins: [currentBookDataMixin],
   data() {
     return {
       budgets: [],
@@ -189,7 +190,6 @@ export default {
     }
   },
   computed: {
-    ...mapGetters(['currentBook']),
     currentMonth() {
       return dayjs().format('M')
     },
@@ -225,12 +225,7 @@ export default {
     }
   },
   created() {
-    this.fetchData()
-  },
-  watch: {
-    currentBook() {
-      this.fetchData()
-    }
+    this.fetchData = this.watchCurrentBook(this.fetchData)
   },
   methods: {
     formatAmount,
@@ -249,17 +244,15 @@ export default {
       if (progress >= 80) return '#ff922b'
       return '#67C23A'
     },
-    async fetchData() {
-      if (!this.currentBook) return
-
+    async fetchData(currentBook) {
       try {
         const dateRange = getMonthRange(this.yearMonth)
 
         const [budgetRes, categoryRes, statsRes] = await Promise.all([
-          getBudgets({ bookId: this.currentBook.id, yearMonth: this.yearMonth }),
+          getBudgets({ bookId: currentBook.id, yearMonth: this.yearMonth }),
           getCategories(),
           getCategoryStats({
-            bookId: this.currentBook.id,
+            bookId: currentBook.id,
             type: 2,
             ...dateRange
           })
@@ -268,7 +261,6 @@ export default {
         this.budgets = budgetRes.data || []
         this.categories = categoryRes.data || []
 
-        // 计算各分类支出
         const stats = statsRes.data || []
         this.categorySpending = {}
         this.totalSpent = 0

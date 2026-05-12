@@ -69,11 +69,12 @@ import * as echarts from 'echarts'
 import { getTrend, getCategoryStats } from '@/api/statistics'
 import { formatAmount, getMonthRange, getWeekRange, getYearRange } from '@/utils/format'
 import { getCategoryIcon } from '@/utils/constants'
-import { mapGetters } from 'vuex'
+import { currentBookDataMixin } from '@/mixins/currentBookData'
 import dayjs from 'dayjs'
 
 export default {
   name: 'Statistics',
+  mixins: [currentBookDataMixin],
   data() {
     return {
       period: 'month',
@@ -92,7 +93,6 @@ export default {
     }
   },
   computed: {
-    ...mapGetters(['currentBook']),
     dateRange() {
       switch (this.period) {
         case 'week':
@@ -117,16 +117,13 @@ export default {
   },
   mounted() {
     this.initCharts()
-    this.fetchData()
+    this.fetchData = this.watchCurrentBook(this.fetchData)
   },
   beforeDestroy() {
     this.destroyCharts()
   },
   watch: {
     period() {
-      this.fetchData()
-    },
-    currentBook() {
       this.fetchData()
     }
   },
@@ -151,12 +148,10 @@ export default {
       this.expenseChartInstance?.resize()
       this.incomeChartInstance?.resize()
     },
-    async fetchData() {
-      if (!this.currentBook) return
-
+    async fetchData(currentBook) {
       try {
         const params = {
-          bookId: this.currentBook.id,
+          bookId: currentBook.id,
           period: this.period,
           ...this.dateRange
         }

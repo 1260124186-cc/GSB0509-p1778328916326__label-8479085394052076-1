@@ -93,10 +93,11 @@ import { getTransactions } from '@/api/transaction'
 import { getBudgets } from '@/api/budget'
 import { formatAmount, getDateLabel } from '@/utils/format'
 import { getCategoryIcon } from '@/utils/constants'
-import { mapGetters } from 'vuex'
+import { currentBookDataMixin } from '@/mixins/currentBookData'
 
 export default {
   name: 'Dashboard',
+  mixins: [currentBookDataMixin],
   data() {
     return {
       overview: {
@@ -115,7 +116,6 @@ export default {
     }
   },
   computed: {
-    ...mapGetters(['currentBook']),
     remainingBudget() {
       return Math.max(0, this.totalBudget - this.overview.monthExpense)
     },
@@ -137,31 +137,23 @@ export default {
     }
   },
   created() {
-    this.fetchData()
-  },
-  watch: {
-    currentBook() {
-      this.fetchData()
-    }
+    this.fetchData = this.watchCurrentBook(this.fetchData)
   },
   methods: {
     formatAmount,
     getCategoryIcon,
-    async fetchData() {
-      if (!this.currentBook) return
-
+    async fetchData(currentBook) {
       this.loading = true
       try {
         const [overviewRes, transactionsRes, budgetRes] = await Promise.all([
-          getOverview({ bookId: this.currentBook.id }),
-          getTransactions({ bookId: this.currentBook.id, page: 1, size: 5 }),
-          getBudgets({ bookId: this.currentBook.id })
+          getOverview({ bookId: currentBook.id }),
+          getTransactions({ bookId: currentBook.id, page: 1, size: 5 }),
+          getBudgets({ bookId: currentBook.id })
         ])
 
         this.overview = overviewRes.data || this.overview
         this.recentTransactions = transactionsRes.data?.records || []
 
-        // 获取总预算
         const budgets = budgetRes.data || []
         const totalBudgetItem = budgets.find(b => b.categoryId === 0)
         this.totalBudget = totalBudgetItem?.amount || 0
